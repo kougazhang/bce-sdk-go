@@ -40,6 +40,7 @@ const (
 var (
 	httpClient *http.Client
 	transport  *http.Transport
+	mutex      sync.Mutex
 )
 
 type timeoutConn struct {
@@ -75,7 +76,9 @@ var customizeInit sync.Once
 
 func InitClient(config ClientConfig) {
 	customizeInit.Do(func() {
+		mutex.Lock()
 		httpClient = &http.Client{}
+		mutex.Unlock()
 		transport = &http.Transport{
 			MaxIdleConnsPerHost:   defaultMaxIdleConnsPerHost,
 			ResponseHeaderTimeout: defaultResponseHeaderTimeout,
@@ -114,7 +117,9 @@ func Execute(request *Request) (*Response, error) {
 	}
 
 	// Set the connection timeout for current request
+	mutex.Lock()
 	httpClient.Timeout = time.Duration(request.Timeout()) * time.Second
+	mutex.Unlock()
 
 	// Set the request method
 	httpRequest.Method = request.Method()
