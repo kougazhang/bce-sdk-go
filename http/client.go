@@ -38,9 +38,7 @@ const (
 // The httpClient is the global variable to send the request and get response
 // for reuse and the Client provided by the Go standard library is thread safe.
 var (
-	httpClient *http.Client
-	transport  *http.Transport
-	mutex      sync.Mutex
+	transport *http.Transport
 )
 
 type timeoutConn struct {
@@ -76,29 +74,26 @@ var customizeInit sync.Once
 
 func InitClient(config ClientConfig) {
 	customizeInit.Do(func() {
-		mutex.Lock()
-		httpClient = &http.Client{}
-		mutex.Unlock()
-		transport = &http.Transport{
-			MaxIdleConnsPerHost:   defaultMaxIdleConnsPerHost,
-			ResponseHeaderTimeout: defaultResponseHeaderTimeout,
-			Dial: func(network, address string) (net.Conn, error) {
-				conn, err := net.DialTimeout(network, address, defaultDialTimeout)
-				if err != nil {
-					return nil, err
-				}
-				tc := &timeoutConn{conn, defaultSmallInterval, defaultLargeInterval}
-				tc.SetReadDeadline(time.Now().Add(defaultLargeInterval))
-				return tc, nil
-			},
-		}
-		httpClient.Transport = transport
-		if config.RedirectDisabled {
-			httpClient.CheckRedirect = func(req *http.Request, via []*http.Request) error {
-				return http.ErrUseLastResponse
-			}
-		}
 	})
+}
+
+func initClient() *http.Client {
+	httpClient := &http.Client{}
+	transport = &http.Transport{
+		MaxIdleConnsPerHost:   defaultMaxIdleConnsPerHost,
+		ResponseHeaderTimeout: defaultResponseHeaderTimeout,
+		Dial: func(network, address string) (net.Conn, error) {
+			conn, err := net.DialTimeout(network, address, defaultDialTimeout)
+			if err != nil {
+				return nil, err
+			}
+			tc := &timeoutConn{conn, defaultSmallInterval, defaultLargeInterval}
+			tc.SetReadDeadline(time.Now().Add(defaultLargeInterval))
+			return tc, nil
+		},
+	}
+	httpClient.Transport = transport
+	return httpClient
 }
 
 // Execute - do the http requset and get the response
@@ -117,9 +112,8 @@ func Execute(request *Request) (*Response, error) {
 	}
 
 	// Set the connection timeout for current request
-	mutex.Lock()
+	httpClient := initClient()
 	httpClient.Timeout = time.Duration(request.Timeout()) * time.Second
-	mutex.Unlock()
 
 	// Set the request method
 	httpRequest.Method = request.Method()
